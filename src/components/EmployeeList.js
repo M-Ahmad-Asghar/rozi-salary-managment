@@ -292,6 +292,12 @@ export const EmployeeList = () => {
                   <SortIcon columnKey="name" />
                 </HStack>
               </Th>
+              <Th cursor="pointer" onClick={() => handleSort("email")}>
+                <HStack spacing={2}>
+                  <Text>Email</Text>
+                  <SortIcon columnKey="email" />
+                </HStack>
+              </Th>
               <Th cursor="pointer" onClick={() => handleSort("designation")}>
                 <HStack spacing={2}>
                   <Text>Designation</Text>
@@ -323,6 +329,7 @@ export const EmployeeList = () => {
             {filteredEmployees.map((employee) => (
               <Tr key={employee.id}>
                 <Td fontWeight="medium">{employee.name}</Td>
+                <Td>{employee.email}</Td>
                 <Td>{employee.designation}</Td>
                 <Td>{formatDate(employee.dateOfJoining)}</Td>
                 <Td>PKR{employee.grossSalary?.toLocaleString()}</Td>

@@ -76,6 +76,7 @@ export const SalaryPaymentForm = ({ isOpen, onClose, employee }) => {
           employeeId: employee.id,
           name: employee.name,
           designation: employee.designation,
+          email: employee.email,
           employeeId: employee.id,
           createdBy: user?.email,
           ...formData,
