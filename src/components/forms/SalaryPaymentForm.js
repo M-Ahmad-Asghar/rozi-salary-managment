@@ -71,6 +71,12 @@ export const SalaryPaymentForm = ({ isOpen, onClose, employee }) => {
       const currentPaymentDate = new Date(formData.transactionDate);
       const nextSalaryDate = new Date(currentPaymentDate);
       nextSalaryDate.setDate(currentPaymentDate.getDate() + 30);
+      const runToast = () => toast({
+        title: "Salary payment recorded successfully",
+        status: "success",
+        duration: 3000,
+        isClosable: true,
+      });
       if (receiptUrl?.length) {
         await recordSalaryPayment({
           employeeId: employee.id,
@@ -84,15 +90,10 @@ export const SalaryPaymentForm = ({ isOpen, onClose, employee }) => {
           nextSalaryDate: nextSalaryDate.toISOString(),
           status: "completed",
           createdAt: new Date().toISOString(),
-        });
+        }, runToast);
       }
 
-      toast({
-        title: "Salary payment recorded successfully",
-        status: "success",
-        duration: 3000,
-        isClosable: true,
-      });
+   
       onClose();
     } catch (error) {
       toast({

@@ -147,25 +147,40 @@ export const getSalaryAlerts = async () => {
   try {
     const today = new Date();
     const nextWeek = new Date(today.getTime() + 7 * 24 * 60 * 60 * 1000);
+    const thirtyDaysAgo = new Date(today.getTime() - 30 * 24 * 60 * 60 * 1000);
     
     const q = query(employeesRef);
     const querySnapshot = await getDocs(q);
     
     const alerts = {
-      upcoming: [],
-      overdue: []
+      overdue: [],
+      upcoming: []
     };
 
     querySnapshot.forEach(doc => {
       const employee = { id: doc.id, ...doc.data() };
-      // Handle the nextSalaryDate properly whether it's a Timestamp or Date string
-      const nextSalaryDate = employee.nextSalaryDate instanceof Timestamp 
-        ? employee.nextSalaryDate.toDate() 
-        : new Date(employee.nextSalaryDate);
       
-      if (nextSalaryDate) {
-        if (nextSalaryDate < today) {
-          alerts.overdue.push({
+      // Handle the dateOfJoining and lastSalaryDate properly whether they are Timestamps or Date strings
+      const dateOfJoining = employee.dateOfJoining instanceof Timestamp 
+        ? employee.dateOfJoining.toDate() 
+        : new Date(employee.dateOfJoining);
+
+      // If there is no lastSalaryDate, consider dateOfJoining as the last salary date
+      const lastSalaryDate = employee?.lastSalarySent?.transactionDate instanceof Timestamp 
+        ? employee?.lastSalarySent?.transactionDate.toDate() 
+        : employee?.lastSalarySent?.transactionDate ? new Date(employee?.lastSalarySent?.transactionDate) : dateOfJoining;
+      
+      // Calculate the next salary due date based on the date of joining (considering only the day)
+      let nextSalaryDate = new Date(today.getFullYear(), today.getMonth(), dateOfJoining.getDate());
+      let nextSalaryDate1 = dateOfJoining.getDate()
+      console.log("lastSalaryDate", employee);
+      
+      // Check if the salary has been paid in the last 30 days
+      const salaryPaidInLast30Days = lastSalaryDate && lastSalaryDate > thirtyDaysAgo;
+
+      if (!salaryPaidInLast30Days) {
+      if (nextSalaryDate1 < new Date().getDate()) {
+            alerts.overdue.push({
             ...employee,
             nextSalaryDate, // Store the converted Date object
             daysOverdue: Math.floor((today - nextSalaryDate) / (1000 * 60 * 60 * 24))
