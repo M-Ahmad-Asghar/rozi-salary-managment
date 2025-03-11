@@ -28,15 +28,6 @@ import { useState, useEffect } from "react";
 import { AddEmployeeForm } from "./forms/AddEmployeeForm";
 import { SalaryPaymentForm } from "./forms/SalaryPaymentForm";
 import {
-  collection,
-  query,
-  onSnapshot,
-  doc,
-  deleteDoc,
-  Timestamp,
-} from "firebase/firestore";
-import { db } from "../firebase/config";
-import {
   FiClock,
   FiUser,
   FiUsers,
@@ -46,6 +37,7 @@ import {
   FiChevronDown,
 } from "react-icons/fi";
 import { useAuth } from "../context/AuthContext";
+import { supabase } from "../supabase/config";
 
 export const EmployeeList = () => {
   const {
@@ -91,13 +83,6 @@ export const EmployeeList = () => {
   // Format date helper function
   const formatDate = (date) => {
     if (!date) return "N/A";
-    if (date instanceof Timestamp) {
-      return date.toDate().toLocaleDateString("en-US", {
-        year: "numeric",
-        month: "2-digit",
-        day: "2-digit",
-      });
-    }
     const dateObj = new Date(date);
     return isNaN(dateObj.getTime())
       ? "Invalid Date"
@@ -145,7 +130,7 @@ export const EmployeeList = () => {
     if (filterStatus !== "all") {
       const now = new Date();
       result = result.filter((employee) => {
-        const nextSalaryDate = new Date(employee.nextSalaryDate);
+        const nextSalaryDate = new Date(employee.next_salary_date);
         if (filterStatus === "overdue") {
           return nextSalaryDate < now;
         }
@@ -161,16 +146,22 @@ export const EmployeeList = () => {
 
   // Fetch employees
   useEffect(() => {
-    const q = query(collection(db, "employees"));
-    const unsubscribe = onSnapshot(q, (querySnapshot) => {
-      const employeesData = [];
-      querySnapshot.forEach((doc) => {
-        employeesData.push({ id: doc.id, ...doc.data() });
-      });
-      setEmployees(employeesData);
-    });
+    const fetchEmployees = async () => {
+      const { data, error } = await supabase.from("employees").select("*");
+      if (error) {
+        toast({
+          title: "Error fetching employees",
+          description: error.message,
+          status: "error",
+          duration: 5000,
+          isClosable: true,
+        });
+      } else {
+        setEmployees(data);
+      }
+    };
 
-    return () => unsubscribe();
+    fetchEmployees();
   }, []);
 
   const handlePaySalary = (employee) => {
@@ -181,13 +172,18 @@ export const EmployeeList = () => {
   const handleDeleteEmployee = async (employeeId) => {
     if (window.confirm("Are you sure you want to delete this employee?")) {
       try {
-        await deleteDoc(doc(db, "employees", employeeId));
+        const { error } = await supabase
+          .from("employees")
+          .delete()
+          .eq("id", employeeId);
+        if (error) throw error;
         toast({
           title: "Employee deleted successfully",
           status: "success",
           duration: 3000,
           isClosable: true,
         });
+        setEmployees(employees.filter((employee) => employee.id !== employeeId));
       } catch (error) {
         toast({
           title: "Error deleting employee",
@@ -199,6 +195,7 @@ export const EmployeeList = () => {
       }
     }
   };
+
   const SortIcon = ({ columnKey }) => {
     if (sortConfig.key !== columnKey) return null;
     return sortConfig.direction === "asc" ? <FiChevronUp /> : <FiChevronDown />;
@@ -331,18 +328,18 @@ export const EmployeeList = () => {
                 <Td fontWeight="medium">{employee.name}</Td>
                 <Td>{employee.email}</Td>
                 <Td>{employee.designation}</Td>
-                <Td>{formatDate(employee.dateOfJoining)}</Td>
+                <Td>{formatDate(employee.date_of_joining)}</Td>
                 <Td>PKR{employee.grossSalary?.toLocaleString()}</Td>
                 <Td>
-                  {employee.nextSalaryDate && (
+                  {employee.next_salary_date && (
                     <Badge
                       colorScheme={
-                        new Date(employee.nextSalaryDate) < new Date()
+                        new Date(employee.next_salary_date) < new Date()
                           ? "red"
                           : "green"
                       }
                     >
-                      {formatDate(employee.nextSalaryDate)}
+                      {formatDate(employee.next_salary_date)}
                     </Badge>
                   )}
                 </Td>

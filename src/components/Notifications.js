@@ -14,41 +14,33 @@ import {
   Icon,
 } from '@chakra-ui/react';
 import { useState, useEffect } from 'react';
-import { collection, query, orderBy, limit, onSnapshot } from 'firebase/firestore';
-import { db } from '../firebase/config';
 import { FiClock, FiCheck, FiAlertTriangle } from 'react-icons/fi';
-
+import { supabase } from '../supabase/config';
 export const Notifications = () => {
   const [notifications, setNotifications] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
   useEffect(() => {
-    const fetchNotifications = () => {
+    const fetchNotifications = async () => {
       try {
-        const q = query(
-          collection(db, 'notifications'),
-          orderBy('sentAt', 'desc'),
-          limit(20)
-        );
+        const { data, error } = await supabase
+          .from('notifications')
+          .select('*')
+          .order('sentAt', { ascending: false })
+          .limit(20);
 
-        const unsubscribe = onSnapshot(q, (querySnapshot) => {
-          const notifs = [];
-          querySnapshot.forEach((doc) => {
-            notifs.push({ id: doc.id, ...doc.data() });
-          });
-          setNotifications(notifs);
-          setLoading(false);
-        });
+        if (error) throw error;
 
-        return unsubscribe;
+        setNotifications(data);
+        setLoading(false);
       } catch (err) {
         setError(err.message);
         setLoading(false);
       }
     };
 
-    return fetchNotifications();
+    fetchNotifications();
   }, []);
 
   const getNotificationIcon = (type) => {
@@ -120,7 +112,7 @@ export const Notifications = () => {
               <CardBody>
                 <Text>{notification.employeeData.employeeName} - PKR{notification.employeeData.amount.toLocaleString()}</Text>
                 <Text fontSize="sm" color="gray.500" mt={2}>
-                  {new Date(notification.sentAt.seconds * 1000).toLocaleString()}
+                  {new Date(notification.sentAt).toLocaleString()}
                 </Text>
               </CardBody>
             </Card>

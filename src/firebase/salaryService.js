@@ -1,30 +1,21 @@
-import {
-  collection,
-  addDoc,
-  updateDoc,
-  doc,
-  Timestamp,
-  getDoc
-} from "firebase/firestore";
-import { db, storage } from "./config";
-import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 import emailjs from '@emailjs/browser';
-
-const salaryTransactionsRef = collection(db, "salaryTransactions");
+import { supabase } from '../supabase/config';
 
 export const recordSalaryPayment = async (paymentData, runToast) => {
   try {
     // Fetch the employee's last salary information
-    const employeeRef = doc(db, "employees", paymentData.employeeId);
-    const employeeDoc = await getDoc(employeeRef);
-    const employeeData = employeeDoc.data();
+    const { data: employeeData, error: employeeError } = await supabase
+      .from('employees')
+      .select('*')
+      .eq('id', paymentData.employeeId)
+      .single();
 
-    // Check if the last salary date falls within the last 30 days
-    const lastSalaryDate = employeeData?.lastSalarySent?.transactionDate
-      ? new Date(employeeData.lastSalarySent.transactionDate)
-      : null;
+    if (employeeError) throw employeeError;
+
+    const lastSalaryDateRaw = JSON.parse(employeeData?.last_salary_sent || "{}")?.transaction_date
+      || null;
+      const lastSalaryDate = new Date(lastSalaryDateRaw);
     const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
-
     if (lastSalaryDate && lastSalaryDate > thirtyDaysAgo) {
       const userConfirmed = window.confirm(
         `The salary for this employee has already been paid in the last 30 days (on ${lastSalaryDate.toLocaleDateString()}). Do you still want to proceed with the payment?`
@@ -35,31 +26,38 @@ export const recordSalaryPayment = async (paymentData, runToast) => {
     }
 
     // Current timestamp
-    const timestamp = Timestamp.now();
+    const timestamp = new Date().toISOString();
 
     // Add the salary transaction
-    const docRef = await addDoc(salaryTransactionsRef, {
-      ...paymentData,
-      transactionDate: Timestamp.fromDate(
-        new Date(paymentData.transactionDate)
-      ),
-      createdAt: timestamp,
-      updatedAt: timestamp,
-      updatedBy: paymentData?.createdBy,
-    });
+    const { data: transactionData, error: transactionError } = await supabase
+      .from('salary_transactions')
+      .insert({
+        ...paymentData,
+        transaction_date: new Date(paymentData.transactionDate).toISOString(),
+        created_at: timestamp,
+        updated_at: timestamp,
+        updated_by: paymentData?.createdBy,
+      });
+
+    if (transactionError) throw transactionError;
 
     // Update the employee's last salary information
-    await updateDoc(employeeRef, {
-      lastSalarySent: {
-        transactionNumber: paymentData.transactionNumber,
-        transactionAmount: paymentData.transactionAmount,
-        transactionDate: paymentData.transactionDate,
-        receiptUrl: paymentData?.receiptUrl,
-      },
-      nextSalaryDate: paymentData.nextSalaryDate,
-      updatedAt: timestamp,
-      updatedBy: paymentData?.createdBy,
-    });
+    const { error: updateError } = await supabase
+      .from('employees')
+      .update({
+        last_salary_sent: {
+          transaction_number: paymentData.transactionNumber,
+          transaction_amount: paymentData.transactionAmount,
+          transaction_date: paymentData.transactionDate,
+          receipt_url: paymentData?.receiptUrl,
+        },
+        next_salary_date: paymentData.nextSalaryDate,
+        updated_at: timestamp,
+        updated_by: paymentData?.createdBy,
+      })
+      .eq('id', paymentData.employeeId);
+
+    if (updateError) throw updateError;
 
     // Send email to employee
     const emailParams = {
@@ -78,12 +76,29 @@ export const recordSalaryPayment = async (paymentData, runToast) => {
       emailParams,
       'xXWVd7oS_khXD9Qch' // Replace with your EmailJS user ID
     );
+    const response = await fetch('https://zxyyalnafhelbmglnzhx.supabase.co/functions/v1/addSalaryToGoogleSheet', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `${supabase.auth.headers.Authorization}`,
+      },
+      body: JSON.stringify({ transactionData: {
+          ...paymentData,
+          transaction_date: new Date(paymentData.transactionDate).toISOString(),
+          created_at: timestamp,
+          updated_at: timestamp,
+          updated_by: paymentData?.createdBy,
+      } }),
+    });
+
+    const result = await response.json();
+    if (result.status !== 'success') {
+      throw new Error(result.message);
+    }
     runToast();
     // reload page
-    window
-      .location
-      .reload();
-    return docRef.id;
+    window.location.reload();
+    return transactionData[0].id;
   } catch (error) {
     console.error("Error recording salary payment:", error);
     throw error;

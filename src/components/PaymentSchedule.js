@@ -20,17 +20,15 @@ import {
   Divider,
 } from '@chakra-ui/react';
 import { useState, useEffect } from 'react';
-import { collection, query, where, orderBy, onSnapshot, Timestamp } from 'firebase/firestore';
-import { db } from '../firebase/config';
 import { FiClock, FiUser, FiCalendar } from 'react-icons/fi';
-
+import { supabase } from '../supabase/config';
 export const PaymentSchedule = () => {
   const [scheduleData, setScheduleData] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [selectedMonth, setSelectedMonth] = useState(new Date().getMonth() + 1);
   const [currentDateTime, setCurrentDateTime] = useState('');
-  const currentUser = 'ZamanTariqdoaz';
+  const currentUser = 'ZamanTariq'; // Replace with dynamic user data
 
   // Update current date time
   useEffect(() => {
@@ -49,38 +47,24 @@ export const PaymentSchedule = () => {
   }, []);
 
   useEffect(() => {
-    const fetchScheduleData = () => {
+    const fetchScheduleData = async () => {
       try {
         // Create date range for selected month
         const year = new Date().getFullYear();
-        const startDate = Timestamp.fromDate(new Date(year, selectedMonth - 1, 1));
-        const endDate = Timestamp.fromDate(new Date(year, selectedMonth, 0));
+        const startDate = new Date(year, selectedMonth - 1, 1).toISOString();
+        const endDate = new Date(year, selectedMonth, 0).toISOString();
 
-        const q = query(
-          collection(db, 'employees'),
-          where('nextSalaryDate', '>=', startDate),
-          where('nextSalaryDate', '<=', endDate),
-          orderBy('nextSalaryDate')
-        );
+        const { data, error } = await supabase
+          .from('employees')
+          .select('*')
+          .gte('nextSalaryDate', startDate)
+          .lte('nextSalaryDate', endDate)
+          .order('nextSalaryDate', { ascending: true });
 
-        const unsubscribe = onSnapshot(q, (querySnapshot) => {
-          const schedule = [];
-          querySnapshot.forEach((doc) => {
-            const data = doc.data();
-            schedule.push({
-              id: doc.id,
-              ...data,
-              // Convert Timestamp to Date if it exists
-              nextSalaryDate: data.nextSalaryDate instanceof Timestamp 
-                ? data.nextSalaryDate.toDate() 
-                : new Date(data.nextSalaryDate)
-            });
-          });
-          setScheduleData(schedule);
-          setLoading(false);
-        });
+        if (error) throw error;
 
-        return unsubscribe;
+        setScheduleData(data);
+        setLoading(false);
       } catch (err) {
         console.error('Error fetching schedule:', err);
         setError(err.message);
@@ -88,14 +72,11 @@ export const PaymentSchedule = () => {
       }
     };
 
-    return fetchScheduleData();
+    fetchScheduleData();
   }, [selectedMonth]);
 
   const formatDate = (date) => {
     if (!date) return 'N/A';
-    if (date instanceof Timestamp) {
-      return date.toDate().toLocaleDateString();
-    }
     const d = new Date(date);
     return isNaN(d.getTime()) ? 'Invalid Date' : d.toLocaleDateString();
   };
@@ -211,7 +192,7 @@ export const PaymentSchedule = () => {
                   <Tr key={schedule.id}>
                     <Td>{formatDate(schedule.nextSalaryDate)}</Td>
                     <Td fontWeight="medium">{schedule.name}</Td>
-                    <Td>PKR {schedule.grossSalary?.toLocaleString()}</Td>
+                    <Td>PKR {schedule.gross_salary?.toLocaleString()}</Td>
                     <Td>
                       <Badge colorScheme={status.color}>
                         {status.label}

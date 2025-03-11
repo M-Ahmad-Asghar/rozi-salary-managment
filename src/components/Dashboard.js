@@ -31,6 +31,8 @@ import { useAuth } from '../context/AuthContext';
 
 export const Dashboard = () => {
   const [salaryAlerts, setSalaryAlerts] = useState({ upcoming: [], overdue: [] });
+  console.log("salaryAlerts", salaryAlerts);
+  
   const [currentDateTime, setCurrentDateTime] = useState('');
   const [selectedEmployee, setSelectedEmployee] = useState(null);
   const { isOpen: isPayOpen, onOpen: onPayOpen, onClose: onPayClose } = useDisclosure();
@@ -55,10 +57,12 @@ export const Dashboard = () => {
 
   // Fetch salary alerts
   useEffect(() => {
+    
     const fetchAlerts = async () => {
       try {
         const alerts = await getSalaryAlerts();
         setSalaryAlerts(alerts);
+ 
       } catch (error) {
         toast({
           title: 'Error fetching salary alerts',
@@ -215,7 +219,6 @@ export const Dashboard = () => {
           </Table>
         </Box>
       )}
-
       {/* Salary Payment Form */}
       {selectedEmployee && (
         <SalaryPaymentForm 

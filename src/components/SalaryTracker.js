@@ -26,19 +26,6 @@ import {
   Flex,
   Divider,
   Icon,
-} from "@chakra-ui/react";
-import React, { useState, useEffect } from "react";
-import {
-  collection,
-  query,
-  orderBy,
-  onSnapshot,
-  getDocs,
-} from "firebase/firestore";
-import { db } from "../firebase/config";
-import { FiImage, FiClock, FiUser, FiDollarSign, FiTrash2 } from "react-icons/fi";
-import { deleteSalaryTransaction } from "../firebase/employeeService";
-import {
   useToast,
   AlertDialog,
   AlertDialogBody,
@@ -48,10 +35,15 @@ import {
   AlertDialogOverlay,
   Button,
 } from "@chakra-ui/react";
+import React, { useState, useEffect } from "react";
+import { FiImage, FiClock, FiUser, FiDollarSign, FiTrash2 } from "react-icons/fi";
 import { useAuth } from "../context/AuthContext";
+import { supabase } from "../supabase/config";
 
 export const SalaryTracker = () => {
   const [salaryData, setSalaryData] = useState([]);
+  console.log("salaryData", salaryData);
+  
   const [employees, setEmployees] = useState({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -61,46 +53,9 @@ export const SalaryTracker = () => {
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const [selectedTransaction, setSelectedTransaction] = useState(null);
   const [isDeletingTransaction, setIsDeletingTransaction] = useState(false);
-  console.log("salaryData", salaryData);
   
   const cancelRef = React.useRef();
   const toast = useToast();
-
-  // Add this function to handle delete
-  const handleDeleteTransaction = async (transaction) => {
-    setSelectedTransaction(transaction);
-    setIsDeleteDialogOpen(true);
-  };
-
-  // Add this function to confirm deletion
-  const confirmDelete = async () => {
-    setIsDeletingTransaction(true);
-    try {
-      await deleteSalaryTransaction(
-        selectedTransaction.id,
-        selectedTransaction.employeeId
-      );
-      toast({
-        title: "Transaction deleted",
-        description: "The salary transaction has been successfully deleted.",
-        status: "success",
-        duration: 5000,
-        isClosable: true,
-      });
-    } catch (error) {
-      toast({
-        title: "Error deleting transaction",
-        description: error.message,
-        status: "error",
-        duration: 5000,
-        isClosable: true,
-      });
-    } finally {
-      setIsDeletingTransaction(false);
-      setIsDeleteDialogOpen(false);
-      setSelectedTransaction(null);
-    }
-  };
 
   const { user } = useAuth();
   const currentUser = user?.email;
@@ -125,10 +80,15 @@ export const SalaryTracker = () => {
   useEffect(() => {
     const fetchEmployees = async () => {
       try {
-        const employeesSnapshot = await getDocs(collection(db, "employees"));
+        const { data, error } = await supabase
+          .from('employees')
+          .select('*');
+
+        if (error) throw error;
+
         const employeesMap = {};
-        employeesSnapshot.forEach((doc) => {
-          employeesMap[doc.id] = { id: doc.id, ...doc.data() };
+        data.forEach((employee) => {
+          employeesMap[employee.id] = employee;
         });
         setEmployees(employeesMap);
       } catch (err) {
@@ -143,36 +103,76 @@ export const SalaryTracker = () => {
   useEffect(() => {
     if (!Object.keys(employees).length) return;
 
-    const fetchSalaryData = () => {
+    const fetchSalaryData = async () => {
       try {
-        const q = query(
-          collection(db, "salaryTransactions"),
-          orderBy("transactionDate", "desc")
-        );
+        const { data, error } = await supabase
+          .from('salary_transactions')
+          .select('*')
+          .order('transactionDate', { ascending: false });
 
-        return onSnapshot(q, (querySnapshot) => {
-          const salaries = querySnapshot.docs.map((doc) => {
-            const data = doc.data();
-            const employee = employees[data.employeeId] || {};
-            return {
-              id: doc.id,
-              ...data,
-              employeeName: employee.name || "Unknown Employee",
-              designation: employee.designation || "N/A",
-            };
-          });
-          setSalaryData(salaries);
-          setLoading(false);
+        if (error) throw error;
+
+        const salaries = data.map((transaction) => {
+          const employee = employees[transaction.employeeId] || {};
+          return {
+            ...transaction,
+            employeeName: employee.name || "Unknown Employee",
+            designation: employee.designation || "N/A",
+          };
         });
+
+        setSalaryData(salaries);
+        setLoading(false);
       } catch (err) {
         setError("Error fetching salary data: " + err.message);
         setLoading(false);
       }
     };
 
-    const unsubscribe = fetchSalaryData();
-    return () => unsubscribe && unsubscribe();
+    fetchSalaryData();
   }, [employees]);
+
+  // Add this function to handle delete
+  const handleDeleteTransaction = (transaction) => {
+    setSelectedTransaction(transaction);
+    setIsDeleteDialogOpen(true);
+  };
+
+  // Add this function to confirm deletion
+  const confirmDelete = async () => {
+    setIsDeletingTransaction(true);
+    try {
+      const { error } = await supabase
+        .from('salary_transactions')
+        .delete()
+        .eq('id', selectedTransaction.id);
+
+      if (error) throw error;
+
+      toast({
+        title: "Transaction deleted",
+        description: "The salary transaction has been successfully deleted.",
+        status: "success",
+        duration: 5000,
+        isClosable: true,
+      });
+
+      // Remove deleted transaction from state
+      setSalaryData(salaryData.filter(tx => tx.id !== selectedTransaction.id));
+    } catch (error) {
+      toast({
+        title: "Error deleting transaction",
+        description: error.message,
+        status: "error",
+        duration: 5000,
+        isClosable: true,
+      });
+    } finally {
+      setIsDeletingTransaction(false);
+      setIsDeleteDialogOpen(false);
+      setSelectedTransaction(null);
+    }
+  };
 
   const handleImageClick = (imageUrl) => {
     setSelectedImage(imageUrl);
@@ -194,36 +194,6 @@ export const SalaryTracker = () => {
       currency: "USD",
     }).format(amount);
   };
-
-  const ImagePreviewModal = () => (
-    <Modal
-      isOpen={isOpen}
-      onClose={onClose}
-      size="4xl"
-      isCentered
-      motionPreset="none"
-    >
-      <ModalOverlay backdropFilter="blur(5px)" />
-      <ModalContent maxW="90vw" maxH="90vh" bg="transparent">
-        <ModalHeader bg="rgba(0,0,0,0.8)" color="white" borderTopRadius="md">
-          Receipt Preview
-        </ModalHeader>
-        <ModalCloseButton color="white" />
-        <ModalBody p={0} bg="black">
-          {selectedImage && (
-            <Image
-              src={selectedImage}
-              alt="Receipt"
-              w="100%"
-              h="80vh"
-              objectFit="contain"
-              loading="eager"
-            />
-          )}
-        </ModalBody>
-      </ModalContent>
-    </Modal>
-  );
 
   if (loading) {
     return (
@@ -331,7 +301,6 @@ export const SalaryTracker = () => {
                   <Th>Transaction Date</Th>
                   <Th isNumeric>Amount</Th>
                   <Th>Transaction #</Th>
-                  {/* <Th>Next Due Date</Th> */}
                   <Th>Status</Th>
                   <Th>Actions</Th>
                 </Tr>
@@ -342,8 +311,8 @@ export const SalaryTracker = () => {
                     <Td fontWeight="medium">{salary.employeeName}</Td>
                     <Td>{salary.designation}</Td>
                     <Td>
-                      {salary.transactionDate?.seconds
-                        ? new Date(salary.transactionDate.seconds * 1000)
+                      {salary.transactionDate
+                        ? new Date(salary.transactionDate)
                             .toISOString()
                             .replace("T", " ")
                             .split(".")[0]
@@ -357,13 +326,6 @@ export const SalaryTracker = () => {
                         {salary.transactionNumber}
                       </Text>
                     </Td>
-                    {/* <Td>
-                      {salary.nextSalaryDate?.seconds
-                        ? new Date(salary.nextSalaryDate.seconds * 1000)
-                            .toISOString()
-                            .split("T")[0]
-                        : "N/A"}
-                    </Td> */}
                     <Td>
                       <Badge colorScheme={getStatusColor(salary.status)}>
                         {salary.status || 'N/A'}

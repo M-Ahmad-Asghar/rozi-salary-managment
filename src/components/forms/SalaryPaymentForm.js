@@ -16,13 +16,11 @@ import {
   Text,
 } from "@chakra-ui/react";
 import { useState } from "react";
-import { storage } from "../../firebase/config";
-import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
-import { recordSalaryPayment } from "../../firebase/salaryService";
 import { useAuth } from "../../context/AuthContext";
-
+import { supabase } from "../../supabase/config";
+import { recordSalaryPayment } from "../../firebase/salaryService";
 export const SalaryPaymentForm = ({ isOpen, onClose, employee }) => {
-  const {user} = useAuth()  
+  const { user } = useAuth();
   const [loading, setLoading] = useState(false);
   const [formData, setFormData] = useState({
     transactionNumber: "",
@@ -57,43 +55,45 @@ export const SalaryPaymentForm = ({ isOpen, onClose, employee }) => {
     try {
       let receiptUrl = "";
       if (receipt) {
-        // Upload receipt to Firebase Storage
-        const storageRef = ref(
-          storage,
-          `receipts/${employee.id}/${Date.now()}_${receipt.name}`
-        );
-        const snapshot = await uploadBytes(storageRef, receipt);
-        receiptUrl = await getDownloadURL(snapshot.ref);
-   
+        // Upload receipt to Supabase Storage
+        const { data, error } = await supabase.storage
+          .from("receipts")
+          .upload(`receipts/${employee.id}/${Date.now()}`, receipt);
+        if (error) throw error;
+        const { data: imageDate, error: urlError } = await supabase.storage
+          .from("receipts").createSignedUrl(data.path, 60);
+          console.log("imageDate",imageDate);
+          
+          const publicURL = imageDate?.signedUrl;
+        if (urlError) throw urlError;
+        receiptUrl = publicURL;
       }
 
       // Calculate next salary date (30 days from current payment)
       const currentPaymentDate = new Date(formData.transactionDate);
       const nextSalaryDate = new Date(currentPaymentDate);
       nextSalaryDate.setDate(currentPaymentDate.getDate() + 30);
+
       const runToast = () => toast({
         title: "Salary payment recorded successfully",
         status: "success",
         duration: 3000,
         isClosable: true,
       });
-      if (receiptUrl?.length) {
-        await recordSalaryPayment({
-          employeeId: employee.id,
-          name: employee.name,
-          designation: employee.designation,
-          email: employee.email,
-          employeeId: employee.id,
-          createdBy: user?.email,
-          ...formData,
-          receiptUrl,
-          nextSalaryDate: nextSalaryDate.toISOString(),
-          status: "completed",
-          createdAt: new Date().toISOString(),
-        }, runToast);
-      }
 
-   
+      await recordSalaryPayment({
+        employeeId: employee.id,
+        name: employee.name,
+        designation: employee.designation,
+        email: employee.email,
+        createdBy: user?.email,
+        ...formData,
+        receiptUrl,
+        nextSalaryDate: nextSalaryDate.toISOString(),
+        status: "completed",
+        createdAt: new Date().toISOString(),
+      }, runToast);
+
       onClose();
     } catch (error) {
       toast({
@@ -151,7 +151,7 @@ export const SalaryPaymentForm = ({ isOpen, onClose, employee }) => {
               </FormControl>
 
               <FormControl>
-                <FormLabel>Upload Receipt</FormLabel>
+                <FormLabel>Upload Receipts</FormLabel>
                 <Input
                   type="file"
                   accept="image/*"
