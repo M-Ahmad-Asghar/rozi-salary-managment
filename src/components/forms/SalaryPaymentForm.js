@@ -60,15 +60,14 @@ export const SalaryPaymentForm = ({ isOpen, onClose, employee }) => {
           .from("receipts")
           .upload(`receipts/${employee.id}/${Date.now()}`, receipt);
         if (error) throw error;
-        const { data: imageDate, error: urlError } = await supabase.storage
-          .from("receipts").createSignedUrl(data.path, 60);
-          console.log("imageDate",imageDate);
-          
-          const publicURL = imageDate?.signedUrl;
-        if (urlError) throw urlError;
+     
+          const {data: publicUrlData, error: publicUrlError} = supabase.storage
+          .from("receipts")
+          .getPublicUrl(data.path);
+          const publicURL = publicUrlData?.publicUrl;
+        if (publicUrlError) throw publicUrlError;
         receiptUrl = publicURL;
       }
-
       // Calculate next salary date (30 days from current payment)
       const currentPaymentDate = new Date(formData.transactionDate);
       const nextSalaryDate = new Date(currentPaymentDate);

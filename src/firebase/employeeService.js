@@ -15,8 +15,7 @@ export const addEmployee = async (employeeData) => {
         last_transaction_number: null,
         last_receipt_url: null
       });
-      console.log("data1212", data);
-      
+    window.location.reload();
     if (error) throw error;
     
     // return data[0].id;
