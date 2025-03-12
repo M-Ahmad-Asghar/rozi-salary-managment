@@ -27,7 +27,7 @@ Deno.serve(async (req) => {
     // Prepare the data for Google Sheets
     const values = [
       timestamp,
-      transactionData.employeeName,
+      transactionData.name,
       transactionData.designation || 'N/A',
       transactionData.transactionNumber,
       transactionData.transactionAmount.toString(),
